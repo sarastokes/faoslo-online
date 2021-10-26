@@ -1,7 +1,19 @@
 classdef OnlineAnalysisApp < handle
 
-    properties
-        parentDir
+    % Properties that can be accessed by the base workspace
+    properties (SetAccess = private)
+        experimentDir
+        newImage
+        videoName
+    end
+
+    % Properties with set functions
+    properties (Access = private)
+        newVideo
+        tform
+    end
+
+    properties %(Access = private)
         imBase
         roiBase
         numROIs
@@ -9,18 +21,14 @@ classdef OnlineAnalysisApp < handle
         imReg
         roiReg
         
-        newImage
-        newVideo
-        videoName
-        tform
         xpts
         data
     end
 
+    % User interface properties
     properties (Hidden, SetAccess = private)
         figureHandle
         imHandle
-        axHandle
         currentRoiIdx
         
         smoothData
@@ -30,27 +38,31 @@ classdef OnlineAnalysisApp < handle
         ROI_INCREMENT = 10;
         FRAME_RATE = 25;
         BKGD_WINDOW = [1 240];
-        TEMP_DIR = 'C:\Users\sarap\Desktop\OnlineReg\';
     end
     
-    properties 
+    properties (Hidden, Access = private)
         dataCache 
     end
 
     methods 
         function obj = OnlineAnalysisApp()
-            obj.parentDir = uigetdir(cd, 'Pick Experiment folder');
-            addpath(genpath(obj.parentDir));
-            cd(obj.parentDir);
+            obj.experimentDir = uigetdir(cd, 'Pick Experiment folder');
+            addpath(genpath(obj.experimentDir));
+            cd(obj.experimentDir);
+            obj.experimentDir = [obj.experimentDir, filesep];
             
             % Make sure connection with ImageJ exists...
             fprintf('Opening ImageJ...\n');
             evalin('base', 'run(''ConnectToImageJ.m'')');
             % Send relevant variables to the base workspace
-            assignin('base', 'parentDir', obj.parentDir);
+            assignin('base', 'experimentDir', obj.experimentDir);
 
-            obj.imBase = imread([obj.parentDir, '\REF_image.png']);
-            obj.roiBase = dlmread([obj.parentDir, '\REF_rois.txt']);
+            try
+                obj.imBase = imread([obj.experimentDir, 'TargetImage.tif']);
+            catch
+                obj.imBase = imread([obj.experimentDir, 'TargetImage.png']);
+            end
+            obj.roiBase = dlmread([obj.experimentDir, 'TargetRois.txt']);
             obj.numROIs = max(unique(obj.roiBase));
             
             obj.currentRoiIdx = 1;
@@ -59,6 +71,15 @@ classdef OnlineAnalysisApp < handle
             
             obj.createUi();
         end
+        
+        function setTransform(obj, tform)
+            assert(isa(tform, 'affine2d'), 'Transform must be type affine2d');
+            obj.tform = tform;
+        end
+
+        function setNewVideo(obj, newVideo)
+            obj.newVideo = newVideo;
+        end
     end
     
     methods (Access = private)
@@ -66,8 +87,16 @@ classdef OnlineAnalysisApp < handle
             switch evt.Key
                 case 'leftarrow'
                     newRoi = obj.currentRoiIdx - obj.ROI_INCREMENT;
+                    if newRoi > 0
+                        obj.currentRoiIdx = newRoi;
+                        obj.showROIs();
+                    end
                 case 'rightarrow'
                     newRoi = obj.currentRoiIdx + obj.ROI_INCREMENT;
+                    if newRoi < obj.numROIs
+                        obj.currentRoiIdx = newRoi;
+                        obj.showROIs();
+                    end
                 case 's'
                     if ~obj.smoothData
                         obj.smoothData = true;
@@ -77,40 +106,40 @@ classdef OnlineAnalysisApp < handle
                     if ~isempty(obj.data)
                         obj.showROIs();
                     end
-                    return
-            end
-            if newRoi < obj.numROIs && newRoi > 0
-                obj.currentRoiIdx = newRoi;
-                obj.showROIs();
             end
         end
         
         function onPush_loadNewData(obj, ~, ~)
-            [newName, fPath, ind] = uigetfile('*.avi',... 
+            % Change current directory to expected new image directory
+            cd([obj.experimentDir, filesep, 'Vis']);
+            [newImageName, newImagePath, ind] = uigetfile('*.avi',... 
                 'Load registered video data');
+            
+            cd(obj.experimentDir);
             if ind == 0
                 return;
             end
             
-            x = strfind(newName, 'vis_');
-            obj.videoName = newName(x:x+7);
+            x = strfind(newImageName, 'vis_');
+            obj.videoName = newImageName(x:x+7);
             
             if isKey(obj.dataCache, obj.videoName)
                 obj.data = obj.dataCache(obj.videoName);
                 return
             end
+            
             % Send relevant variables to base workspace for ImageJ
-            assignin('base', 'newName', newName);
-            assignin('base', 'filePath', fPath);
+            assignin('base', 'newImageName', newImageName);
+            assignin('base', 'newImagePath', newImagePath);
             
             % Import video and image
-            % obj.newVideo = video2stack([fPath, filesep, newName]);
-            evalin('base', 'run(''ConvertAVI2TIF.m'')');
+            evalin('base', 'run(''ConvertAvi2Tif.m'')');
             obj.newVideo = evalin('base', 'ts');
+            
             try
-                obj.newImage = imread(strrep([fPath, filesep, newName], '.avi', '.tif'));
+                obj.newImage = imread(strrep([newImagePath, filesep, newImageName], '.avi', '.tif'));
             catch
-                obj.newImage = imread(strrep([fPath, filesep, newName], '.avi', '.png'));
+                obj.newImage = imread(strrep([newImagePath, filesep, newImageName], '.avi', '.png'));
             end
             
             obj.registerData();
@@ -122,7 +151,7 @@ classdef OnlineAnalysisApp < handle
              
             obj.showROIs();
             title(findByTag(obj.figureHandle, 'ax_1'), obj.videoName,...
-                'Interpreter', 'none');
+                'Interpreter', 'none', 'FontSize', 8);
         end
         
         function onSelect_Dataset(obj, src, ~)
@@ -131,10 +160,29 @@ classdef OnlineAnalysisApp < handle
             obj.data = obj.dataCache(obj.videoName);
             title(findByTag(obj.figureHandle, 'ax_1'), obj.videoName);
             obj.showROIs();
-        end        
+        end   
+        
+        
+        function onCheck_HoldData(obj, src, ~)
+            if src.Value
+                for i = 1:obj.ROI_INCREMENT
+                    ax = obj.getNumberedAxis(i);
+                    hNew = copyobj(findByTag(ax, 'SignalLine'), ax);
+                    hNew.Tag = 'HeldLine';
+                    hNew.Color = [0.5 0 0];
+                end
+            else
+                h = findall(obj.figureHandle, 'Tag', 'HeldLine');
+                delete(h);
+            end
+        end
     end
     
     methods 
+        function ax = getNumberedAxis(obj, ind)
+            ax = findByTag(obj.figureHandle, ['ax_', num2str(ind)]);
+        end
+        
         function showROIs(obj)
             for i = 1:obj.ROI_INCREMENT
                 idx = obj.currentRoiIdx + i - 1;
@@ -178,14 +226,13 @@ classdef OnlineAnalysisApp < handle
             title(obj.imHandle, 'New Data',...
                 'Interpreter', 'none');
             
-            [obj.data, obj.xpts] = roiSignals(obj.newVideo(:, :, :), obj.roiReg,... 
+            [obj.data, obj.xpts] = ao.online.roiSignals(obj.newVideo(:, :, :), obj.roiReg,... 
                 obj.FRAME_RATE, obj.BKGD_WINDOW, false);
             h = findall(obj.figureHandle, 'Tag', 'ZeroLine');
             for i = 1:numel(h)
                 h(i).XData = [floor(obj.xpts(1)), ceil(obj.xpts(end))];
             end
             obj.data(isnan(obj.data)) = 0;
-
         end
     end
 
@@ -209,7 +256,7 @@ classdef OnlineAnalysisApp < handle
                 'Tag', 'imLayout');
 
             baseAxis = axes('Parent', uipanel(imLayout, 'BackgroundColor', 'w'));
-            roiOverlay(obj.imBase, obj.roiBase,...
+            ao.online.roiOverlay(obj.imBase, obj.roiBase,...
                 'Parent', baseAxis);
             axis(baseAxis, 'tight');
             axis(baseAxis, 'equal');
@@ -217,16 +264,30 @@ classdef OnlineAnalysisApp < handle
             title(baseAxis, 'Reference Image');
 
             obj.imHandle = axes(uipanel(imLayout, 'BackgroundColor', 'w'));
-            uicontrol(imLayout, 'Style', 'push',...
-                'String', 'Load New Data',...
-                'Callback', @obj.onPush_loadNewData);
+            
             uix.Empty('Parent', imLayout,...
                 'BackgroundColor', 'w');
-            uicontrol(imLayout, 'Style', 'text', 'String', 'Existing Data:');
-            uicontrol(imLayout, 'Style', 'listbox',...
+            
+            dataLayout = uix.HBox('Parent', imLayout,...
+                'BackgroundColor', 'w');
+            dataLayoutA = uix.VBox('Parent', dataLayout,...
+                'BackgroundColor', 'w');
+            uicontrol(dataLayoutA, 'Style', 'text', 'String', 'Existing Data:');
+            uicontrol(dataLayoutA, 'Style', 'listbox',...
                 'Tag', 'DataList',...
                 'Callback', @obj.onSelect_Dataset);
-            set(imLayout, 'Heights', [-1 -1 25 10 20 75]);
+            set(dataLayoutA, 'Heights', [17 -1]);
+            dataLayoutB = uix.VBox('Parent', dataLayout,...
+                'BackgroundColor', 'w');
+            uicontrol(dataLayoutB, 'Style', 'push',...
+                'String', 'Load New Data',...
+                'Callback', @obj.onPush_loadNewData);
+            uicontrol(dataLayoutB,... 
+                'Style', 'check',...
+                'String', 'Hold Data',...
+                'Tag', 'Check_HoldData',...
+                'Callback', @obj.onCheck_HoldData);
+            set(imLayout, 'Heights', [-1 -1 10 70]);
             
             plotLayout = uix.VBox('Parent', mainLayout,...
                 'BackgroundColor', 'w');
