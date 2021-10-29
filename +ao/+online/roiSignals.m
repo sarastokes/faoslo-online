@@ -18,7 +18,6 @@ function [A, xpts] = roiSignals(imStack, L, sampleRate, bkgdWindow, medianFlag)
     %   06Nov2020 - SSP
     %   02Dec2020 - SSP - Added bkgd estimation options
     % --------------------------------------------------------------------
-    
     if nargin < 4
         bkgdWindow = [];
     end

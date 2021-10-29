@@ -8,18 +8,18 @@ classdef OnlineAnalysisApp < handle
     end
 
     % Properties with set functions
-    properties (Access = private)
-        newVideo
-        tform
+    properties (SetAccess = private)
+        newVideo        % Epoch video
+        tform           % affine2d transform
     end
 
-    properties %(Access = private)
+    properties (SetAccess = private)
         imBase
-        roiBase
-        numROIs
+        roiBase         % ROI segmentation for target image
+        numROIs         % Number of ROIs
         
-        imReg
-        roiReg
+        imReg           % Target image registered to new image
+        roiReg          % ROIs registered to new image
         
         xpts
         data
@@ -32,6 +32,7 @@ classdef OnlineAnalysisApp < handle
         currentRoiIdx
         
         smoothData
+        heldData
     end
     
     properties (Hidden, Constant)
@@ -42,6 +43,7 @@ classdef OnlineAnalysisApp < handle
     
     properties (Hidden, Access = private)
         dataCache 
+        stimTable
     end
 
     methods 
@@ -63,22 +65,30 @@ classdef OnlineAnalysisApp < handle
                 obj.imBase = imread([obj.experimentDir, 'TargetImage.png']);
             end
             obj.roiBase = dlmread([obj.experimentDir, 'TargetRois.txt']);
-            obj.numROIs = max(unique(obj.roiBase));
+            obj.numROIs = max(obj.roiBase(:));
             
             obj.currentRoiIdx = 1;
             obj.smoothData = false;
             obj.dataCache = containers.Map();
             
             obj.createUi();
+            obj.userPrefChange();
         end
         
         function setTransform(obj, tform)
+            % SETTRANSFORM
             assert(isa(tform, 'affine2d'), 'Transform must be type affine2d');
             obj.tform = tform;
         end
 
         function setNewVideo(obj, newVideo)
+            % SETNEWVIDEO
             obj.newVideo = newVideo;
+        end
+    end
+
+    methods (Access = private)
+        function loadNewData(obj)
         end
     end
     
@@ -114,7 +124,6 @@ classdef OnlineAnalysisApp < handle
             cd([obj.experimentDir, filesep, 'Vis']);
             [newImageName, newImagePath, ind] = uigetfile('*.avi',... 
                 'Load registered video data');
-            
             cd(obj.experimentDir);
             if ind == 0
                 return;
@@ -123,6 +132,7 @@ classdef OnlineAnalysisApp < handle
             x = strfind(newImageName, 'vis_');
             obj.videoName = newImageName(x:x+7);
             
+            % Check cache for video
             if isKey(obj.dataCache, obj.videoName)
                 obj.data = obj.dataCache(obj.videoName);
                 return
@@ -143,18 +153,42 @@ classdef OnlineAnalysisApp < handle
             end
             
             obj.registerData();
+
+            obj.processData();
                         
+            % Update the data cache
             obj.dataCache(obj.videoName) = obj.data;
             h = findByTag(obj.figureHandle, 'DataList');
             h.String = obj.dataCache.keys;
             h.Value = numel(h.String);
-             
+            
+            % Show plots of the ROIs
             obj.showROIs();
             title(findByTag(obj.figureHandle, 'ax_1'), obj.videoName,...
                 'Interpreter', 'none', 'FontSize', 8);
+
+            % Get stimulus name, if available
+            try
+                stimName = obj.getStimulusName();
+            catch  % No stimulus or unrecognized format
+                stimName = "Unknown";
+            end
+            
+            if isempty(obj.stimTable)
+                obj.stimTable = table(obj.name2id(obj.videoName), stimName,...
+                    'VariableNames', {'EpochID', 'Stimulus'});
+            else
+                obj.stimTable = [obj.stimTable; ... 
+                    table(obj.name2id(obj.videoName), stimName,...
+                    'VariableNames', {'EpochID', 'Stimulus'})];
+            end
+            
+            h = findByTag(obj.figureHandle, 'List_Stim');
+            h.String = unique(obj.stimTable.Stimulus);
         end
         
         function onSelect_Dataset(obj, src, ~)
+            % ONSELECT_DATASET
             obj.videoName = src.String(src.Value);
             obj.videoName = obj.videoName{:};
             obj.data = obj.dataCache(obj.videoName);
@@ -162,16 +196,35 @@ classdef OnlineAnalysisApp < handle
             obj.showROIs();
         end   
         
-        
+        function onSelect_Stimulus(obj, src, ~)
+            % ONSELECT_STIMULUS
+            stimName = src.String{src.Value};
+            
+            ind = obj.stimTable.Stimulus == string(stimName);
+            IDs = obj.stimTable{ind, 'EpochID'};
+            
+            newData = zeros(size(obj.data, 1), size(obj.data, 2), numel(IDs));
+            for i = 1:numel(IDs)
+                newData(:, :, i) = obj.dataCache(['vis_', int2fixedwidthstr(IDs(i), 4)]);
+            end
+            obj.data = mean(newData, 3);
+            obj.videoName = stimName;
+            obj.showROIs();
+            title(findByTag(obj.figureHandle, 'ax_1'), obj.videoName);
+        end
+              
         function onCheck_HoldData(obj, src, ~)
+            % ONCHECK_HOLDDATA
             if src.Value
+                obj.heldData = obj.data;
                 for i = 1:obj.ROI_INCREMENT
                     ax = obj.getNumberedAxis(i);
                     hNew = copyobj(findByTag(ax, 'SignalLine'), ax);
                     hNew.Tag = 'HeldLine';
-                    hNew.Color = [0.5 0 0];
+                    hNew.Color = [0 0.5 0];
                 end
             else
+                obj.heldData = [];
                 h = findall(obj.figureHandle, 'Tag', 'HeldLine');
                 delete(h);
             end
@@ -180,28 +233,50 @@ classdef OnlineAnalysisApp < handle
     
     methods 
         function ax = getNumberedAxis(obj, ind)
+            % GETNUMBEREDAXIS
             ax = findByTag(obj.figureHandle, ['ax_', num2str(ind)]);
         end
         
         function showROIs(obj)
+            % SHOWROIS
             for i = 1:obj.ROI_INCREMENT
                 idx = obj.currentRoiIdx + i - 1;
+                ax = findobj(obj.figureHandle, 'Tag', sprintf('ax_%u', i));               
+                h = findobj(ax, 'Tag', 'SignalLine');
+                
                 if idx > size(obj.data, 1)
+                    h.YData = zeros(size(h.YData));
+                    if ~isempty(obj.heldData)
+                        set(findByTag(ax, 'HeldLine'),... 
+                            'YData', zeros(size(h.YData)));
+                    end
+                    ylabel(ax, ''); 
+                    ylim(ax, [-1 1]);
                     continue
                 end
-                ax = findobj(obj.figureHandle, 'Tag', sprintf('ax_%u', i));
-                h = findobj(ax, 'Tag', 'SignalLine');
-                h.XData = obj.xpts;
                 
+                h.XData = obj.xpts;             
                 if obj.smoothData 
                     h.YData = mysmooth(obj.data(idx, :), 100);
                 else
                     h.YData = obj.data(idx, :);
                 end
-                xlim(ax, [floor(obj.xpts(1)), ceil(obj.xpts(end))]);
                 maxVal = max(abs(h.YData));
-                if max(abs(h.YData)) ~= 0
-                    ylim(ax, maxVal * [-1 1]);
+                
+                if ~isempty(obj.heldData)
+                    h2 = findobj(ax, 'Tag', 'HeldLine');
+                    if obj.smoothData
+                        h2.YData = mysmooth(obj.heldData(idx, :), 100);
+                    else
+                        h2.YData = obj.heldData(idx, :);
+                    end
+                    maxVal = max([maxVal, max(abs(h2.YData))]);
+                end
+                
+                % Plot appearance
+                xlim(ax, [floor(obj.xpts(1)), ceil(obj.xpts(end))]);
+                if maxVal ~= 0  % missing ROI
+                    makeYAxisSymmetric(ax);
                     set(ax, 'YTick', -maxVal:0.25:maxVal, 'YTickLabel', {});
                 end
                 ylabel(ax, sprintf('ROI %u', idx));
@@ -210,7 +285,11 @@ classdef OnlineAnalysisApp < handle
         end
         
         function registerData(obj)
-            % Run registration in base workspace for ImageJ, get results
+            % REGISTERDATA
+            % 
+            % Description:
+            %   Run SIFT reg in ImageJ from base workspace, handle results
+            % -------------------------------------------------------------
             evalin('base', 'run(''DoSIFTRegistration.m'')');
             obj.tform = evalin('base', 'tform');
             
@@ -219,20 +298,55 @@ classdef OnlineAnalysisApp < handle
             obj.roiReg = imwarp(obj.roiBase, baseRefObj, obj.tform,...
                 'OutputView', newRefObj,...
                 'interp', 'nearest');
+            obj.imReg = imwarp(obj.imBase, baseRefObj, obj.tform,...
+                'OutputView', newRefObj);
             % Plot the new image with registered ROIs
             cla(obj.imHandle);
             roiOverlay(obj.newImage, obj.roiReg,...
                 'Parent', obj.imHandle);
             title(obj.imHandle, 'New Data',...
                 'Interpreter', 'none');
+        end
+
+        function processData(obj)
+            % PROCESSDATA
+            %
+            % Description:
+            %   Process data determines how incoming videos are processed 
+            %   and ultimately assigned to obj.data
+            % -------------------------------------------------------------
             
-            [obj.data, obj.xpts] = ao.online.roiSignals(obj.newVideo(:, :, :), obj.roiReg,... 
+            [obj.data, obj.xpts] = ao.online.roiSignals(...
+                obj.newVideo(:, :, :), obj.roiReg,... 
                 obj.FRAME_RATE, obj.BKGD_WINDOW, false);
             h = findall(obj.figureHandle, 'Tag', 'ZeroLine');
             for i = 1:numel(h)
                 h(i).XData = [floor(obj.xpts(1)), ceil(obj.xpts(end))];
             end
             obj.data(isnan(obj.data)) = 0;
+        end
+
+        function stimName = getStimulusName(obj)
+            % EXTRACTEPOCHATTRIBUTES
+            % 
+            % Description:
+            %   Load stimulus name from attributes file
+            % -------------------------------------------------------------
+
+            % Get stimulus parameter path
+            expName = strsplit(obj.experimentDir, filesep);
+            expIDs = strsplit(expName{end-1}, '_');
+            source = expIDs{1}; 
+            source = source(end-2:end);
+            fileName = sprintf('%s_%s_ref_%s.txt', ...
+                source, expIDs{2}, obj.videoName(end-3:end));
+            filePath = [obj.experimentDir, filesep, 'Ref', filesep, fileName];
+
+            stimulusFileName = readProperty(filePath, 'Trial file name = ');
+            txt = strsplit(stimulusFileName, filesep);
+            stimName = txt{end};
+            stimName = erase(stimName, '.txt');
+            stimName = string(stimName);
         end
     end
 
@@ -251,11 +365,12 @@ classdef OnlineAnalysisApp < handle
             
             mainLayout = uix.HBox('Parent', obj.figureHandle,...
                 'BackgroundColor', 'w');
+            
+            % Left top panel with images
             imLayout = uix.VBox('Parent', mainLayout,...
                 'BackgroundColor', 'w',...
                 'Tag', 'imLayout');
-
-            baseAxis = axes('Parent', uipanel(imLayout, 'BackgroundColor', 'w'));
+            baseAxis = axes(uipanel(imLayout, 'BackgroundColor', 'w'));
             ao.online.roiOverlay(obj.imBase, obj.roiBase,...
                 'Parent', baseAxis);
             axis(baseAxis, 'tight');
@@ -268,27 +383,35 @@ classdef OnlineAnalysisApp < handle
             uix.Empty('Parent', imLayout,...
                 'BackgroundColor', 'w');
             
+            % Left bottom panel with controls
             dataLayout = uix.HBox('Parent', imLayout,...
                 'BackgroundColor', 'w');
             dataLayoutA = uix.VBox('Parent', dataLayout,...
                 'BackgroundColor', 'w');
-            uicontrol(dataLayoutA, 'Style', 'text', 'String', 'Existing Data:');
+            uicontrol(dataLayoutA, 'Style', 'text',... 
+                'String', 'Existing Data:');
             uicontrol(dataLayoutA, 'Style', 'listbox',...
                 'Tag', 'DataList',...
                 'Callback', @obj.onSelect_Dataset);
-            set(dataLayoutA, 'Heights', [17 -1]);
-            dataLayoutB = uix.VBox('Parent', dataLayout,...
-                'BackgroundColor', 'w');
-            uicontrol(dataLayoutB, 'Style', 'push',...
+            uicontrol(dataLayoutA, 'Style', 'push',...
                 'String', 'Load New Data',...
                 'Callback', @obj.onPush_loadNewData);
+            set(dataLayoutA, 'Heights', [17 -1 20]);
+            dataLayoutB = uix.VBox('Parent', dataLayout,...
+                'BackgroundColor', 'w');
             uicontrol(dataLayoutB,... 
                 'Style', 'check',...
                 'String', 'Hold Data',...
                 'Tag', 'Check_HoldData',...
                 'Callback', @obj.onCheck_HoldData);
-            set(imLayout, 'Heights', [-1 -1 10 70]);
+            uicontrol(dataLayoutB,...
+                'Style', 'list',...
+                'Tag', 'List_Stim',...
+                'Callback', @obj.onSelect_Stimulus);
+            set(dataLayoutB, 'Heights', [15 -1]);
+            set(imLayout, 'Heights', [-1 -1 10 120]);
             
+            % Right panel with ROI plots
             plotLayout = uix.VBox('Parent', mainLayout,...
                 'BackgroundColor', 'w');
             for i = 1:obj.ROI_INCREMENT
@@ -299,14 +422,41 @@ classdef OnlineAnalysisApp < handle
                     set(ax, 'XTickLabel', []);
                 end
                 plot(ax, [0 1], [0 0],... 
-                    'LineWidth', 0.75, 'Color', [0.45 0.45 0.45],...
+                    'LineWidth', 0.75,... 
+                    'Color', [0.45 0.45 0.45],...
                     'Tag', 'ZeroLine');
                 plot(ax, [0 1], [0 0],... 
-                    'LineWidth', 1.5, 'Color', [0 0 0.3],...
+                    'LineWidth', 1.5,... 
+                    'Color', [0 0 0.3],...
                     'Tag', 'SignalLine');
             end
             
             set(mainLayout, 'Widths', [-1 -1]);
+        end
+        
+        function userPrefChange(obj)
+            prefs = containers.Map();
+            prefs('bkgdWindow1') = obj.BKGD_WINDOW(1);
+            prefs('bkgdWindow2') = obj.BKGD_WINDOW(2);
+            d = UserPrefView2(prefs);
+        end
+        
+        function onDialog_ChangedPref(obj, src, evt)
+            disp('Hey')
+            assignin('base', 'src', src);
+            assignin('base', 'evt', evt);
+        end
+    end
+    
+    methods (Static)      
+        function ID = name2id(vidName)
+            % NAME2ID
+            ID = str2double(vidName(end-2:end));
+        end
+
+        function vidName = id2name(ID)
+            % ID2NAME
+            vidName = ['vis_', int2fixedwidthstr(ID, 4)];
         end
     end
 end 
