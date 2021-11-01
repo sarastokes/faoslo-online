@@ -1,8 +1,21 @@
-% Check whether ImageJ is running, if not connect and install macros
+% CONNECTTOIMAGEJ
+%
+% Description:
+%   Check whether ImageJ is running, if not connect
+%
+% Requires:
+%   - User preferences file with 'fijiDir' set (see README.md)
+%   - FIJI with ImageJ-MATLAB plugin 
+%
+% History:
+%   24Oct2021 - SSP
+%   29Oct2021 - SSP - Removed hard-coded directories, macro installs
+% -------------------------------------------------------------------------
 
-if ~exist('IJM', 'var')
-    addpath('C:/Users/sarap/Documents/FIJI/Fiji.app/scripts/');
+try 
+    ij.IJ.getInstance();
+catch
+    run('getUserPreferences.m');
+    addpath(fijiDir);
     ImageJ;
-    ij.IJ.run("Install...", "install=C:/Users/sarap/Dropbox/Postdoc/Code/imagej-tools/exportLoggedTransform.ijm");
-    ij.IJ.run("Install...", "install=C:/Users/sarap/Dropbox/Postdoc/Code/imagej-tools/convertAvi2Tif.ijm");
 end

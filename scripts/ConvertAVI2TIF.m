@@ -1,17 +1,35 @@
+% ConvertAvi2Tif.m
+%
 % Open .avi file in ImageJ, save as .tif then open the .tiff file here
 % ~25 seconds faster than using MATLAB VideoReader to load the avi directly 
+%
+% Variables sent to base workspace before analyzing:
+% - experimentDir
+% - newImageName
+% - newImagePath 
+%
+% Variables sent back to the app:
+% - ts
+% 
+% History:
+%   24Oct2021 - SSP
+%   01Nov2021 - SSP - Removed need for ConvertAvi2Tif.ijm call
+% -------------------------------------------------------------------------
 
-TEMP_DIR = 'C:\Users\sarap\Desktop\OnlineReg\';
-if exist([TEMP_DIR, filesep, strrep(newName, '.avi', '_temp.tiff')], 'file')
-    ts = TIFFStack([TEMP_DIR, filesep, strrep(newName, '.avi', '_temp.tiff')]);
-    return
+import ij.*;
+
+tiffPath = [experimentDir, filesep, 'Analysis', filesep,... 
+    strrep(newImageName, '.avi', '_temp.tiff')];
+
+if ~exist(tiffPath, 'file')
+    imv = ij.IJ.openImage([newImagePath, filesep, newImageName]);
+    imv.show();
+    
+    IJ.saveAs("Tiff", java.lang.String(tiffPath));
+    IJ.run('Close All');
+else
+    disp('Found cached .tif file');
 end
 
-imv = ij.IJ.openImage([filePath, filesep, newName]);
-imv.show();
-
-ij.IJ.run("Install...", "install=C:/Users/sarap/Dropbox/Postdoc/Code/imagej-tools/convertAvi2Tif.ijm");
-ij.IJ.run("convertAvi2Tif");
-
-warning('off', 'MATLAB:imagesci:tiffmexutils:libtiffWarning');
-ts = TIFFStack([TEMP_DIR, filesep, strrep(newName, '.avi', '_temp.tiff')]);
+ts = TIFFStack(tiffPath);
+app.setNewVideo(ts);

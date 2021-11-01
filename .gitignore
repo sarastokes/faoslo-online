@@ -1,6 +1,10 @@
+# File types
 *.asv
+*.m~
+
+# Folders
 /test
+/dev
 
 # User-specific files
-parameters.txt
 getUserPreferences.m
