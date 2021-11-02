@@ -42,8 +42,8 @@ str = char(IJ.getLog());
 tform = extractLastTransform(str);
 
 % Close out all the windows
-while WindowManager.getImageCount() > 0
-    openImg = IJ.getImage();
-    openImg.close();
-end
+IJ.run('Close All');
+
+% Send to OnlineAnalysisApp
+app.setTransform(tform);
 

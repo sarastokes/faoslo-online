@@ -28,12 +28,17 @@ You will be prompted to select your experiment file, as described above.
 
 Before importing data, go to the "Prefs" tab and ensure the settings under the header "Set before importing new data" are accurate. You only need the signal window if you intend to look at the frequency response. The background window dictates the F - F0 calculation. 
 
-Click `Load New Video` to load, register and analyze a new video. Once you have multiple epochs loaded, you can choose which epoch to view on the right list box. If there are stimuli associated with the videos, you can choose them to see an average of all epochs using that stimulus. Use the arrow keys to navigate through the ROIs and `s` to smooth or unsmooth the data. Press `f` to switch to frequency domain. If the keys don't work, click somewhere on the plot side of the window, then try again.
+Click `Load New Video` to load, register and analyze a new video. The registration quality is reported using the built-in `ssim` function. Once you have multiple epochs loaded, you can choose which epoch to view on the right list box. If there are stimuli associated with the videos, you can choose them to see an average of all epochs using that stimulus. Use the arrow keys to navigate through the ROIs and `s` to smooth or unsmooth the data. Press `f` to switch to frequency domain. If the keys don't work, click somewhere on the plot side of the window, then try again.
 
-NOTE: A quirk of the software that communicates with MATLAB-ImageJ plugin is that it cannot be easily used from inside a function, only scripts or the command line. For this reason, it was necessary for the app to occasionally use the base workspace. As long as you have the OnlineAnalysisApp open, don't delete the `app` variable you created when instantiating it. If you wanted to open a second instance, make sure to assign it to a different variable. 
+When you're done and want to disconnect from ImageJ, run from the command line:
+```matlab
+ij.IJ.run("Quit", "");
+```
+
+**Important:** A quirk of the software that communicates with MATLAB-ImageJ plugin is that it cannot be easily used from inside a function, only scripts or the command line. For this reason, it was necessary to occasionally use the base workspace. As long as you have the OnlineAnalysisApp open, don't delete the `app` variable you created when instantiating it. 
 
 ## Requirements
-- MATLAB 2015a or higher with "MATLAB Support for MinGW-w64 C/C++ Compiler" installed
+- MATLAB 2015a or higher with the Image Processing Toolbox
 - FIJI with the [MATLAB-ImageJ](https://sites.imagej.net/MATLAB) plugin installed 
 
 ## Dependencies

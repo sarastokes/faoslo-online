@@ -12,9 +12,7 @@
 %   29Oct2021 - SSP - Removed hard-coded directories, macro installs
 % -------------------------------------------------------------------------
 
-try 
-    ij.IJ.getInstance();
-catch
+if isempty(ij.IJ.getInstance())
     run('getUserPreferences.m');
     addpath(fijiDir);
     ImageJ;
