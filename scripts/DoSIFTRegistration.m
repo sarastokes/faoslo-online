@@ -1,17 +1,17 @@
 % DoSIFTRegistration
-% 
-% History:
-%   24Oct2021 - SSP
-%   29Oct2021 - SSP - Removed call to imagej macro
-% -------------------------------------------------------------------------
-
+%
 % Variables sent to base workspace before analyzing:
 % - experimentDir
 % - newImageName
 % - newImagePath
-
+%
 % Variables to send back to app:
 % - tform
+%
+% History:
+%   24Oct2021 - SSP
+%   29Oct2021 - SSP - Removed call to imagej macro
+% -------------------------------------------------------------------------
 
 import ij.*;
 
@@ -39,7 +39,7 @@ IJ.selectWindow(newImageName);
 str = char(IJ.getLog());
 
 % Extract transform from Log output and convert to MATLAB affine2d
-tform = extractLastTransform(str);
+tform = ao.online.extractLastTransform(str);
 
 % Close out all the windows
 IJ.run('Close All');

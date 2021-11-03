@@ -259,7 +259,7 @@ classdef OnlineAnalysisApp < handle
             if obj.frequencyDomain
                 obj.getFrequencyDomain();
             else
-                obj.fData = [];
+                obj.fdata = [];
             end
             obj.videoName = stimName;
             obj.showROIs();
