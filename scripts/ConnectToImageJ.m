@@ -10,9 +10,18 @@
 % History:
 %   24Oct2021 - SSP
 %   29Oct2021 - SSP - Removed hard-coded directories, macro installs
+%   03Nov2021 - SSP - Coverage for situations where ImageJ was open before
 % -------------------------------------------------------------------------
 
-if isempty(ij.IJ.getInstance())
+try 
+    % Previous ImageJ connection
+    if isempty(ij.IJ.getInstance())
+        run('getUserPreferences.m');
+        addpath(fijiDir);
+        ImageJ;
+    end
+catch
+    % No previous ImageJ connection
     run('getUserPreferences.m');
     addpath(fijiDir);
     ImageJ;
