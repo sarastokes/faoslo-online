@@ -1,5 +1,9 @@
 function [signal, xpts] = roiSignal(imStack, roiMask, sampleRate, bkgdWindow, medianFlag)
+
     % ROISIGNAL
+    %
+    % Description:
+    %   Calculates dF/F for a ROI
     %
     % Syntax:
     %   roiSignal(imStack, roiMask, frameRate);
@@ -29,7 +33,7 @@ function [signal, xpts] = roiSignal(imStack, roiMask, sampleRate, bkgdWindow, me
     %   22Aug2020 - SSP
     %   02Dec2020 - SSP - Added bkgd estimation options
     %   19Dec2020 - SSP - Removed first frame from analysis
-    % --------------------------------------------------------------------
+    % ---------------------------------------------------------------------
     
     % Get xpts while accounting for throwing out first blank frame
     xpts = 1/sampleRate : 1/sampleRate : (size(imStack, 3)+1)/sampleRate;

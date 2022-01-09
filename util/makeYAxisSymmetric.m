@@ -12,9 +12,18 @@ function makeYAxisSymmetric(ax, roundToNearest)
     %
     % History:
     %   26Oct2021 - SSP
-    % ---------------------------------------------------------------------
+    % ----------------------------------------------------------------
 
-    ylim(ax, 'auto');
+    if nargin == 0
+        ax = gca;
+    else
+        assert(isa(ax, 'matlab.graphics.axis.Axes'),... 
+            'Input must be axes handle!');
+    end
+    
+    x = get(ax, 'XLim');
+    axis(ax, 'tight');
+    % ylim(ax, 'auto');
     y = get(ax, 'YLim');
     maxVal = max(abs(y));
 
@@ -24,3 +33,4 @@ function makeYAxisSymmetric(ax, roundToNearest)
     end
 
     ylim(ax, maxVal * [-1 1]);
+    xlim(x);

@@ -4,17 +4,17 @@ Online analysis for calcium imaging with fluorescence adaptive optics scanning l
 ## Setup
 The analysis software anticipates your experiment directory follows the lab's conventions. Your experiment folder should be arranged as follows:
 
-- ```\Analysis``` - temporary files containing the transformations and file conversions will be saved here. After the experiment and online analysis is over, you are free to keep them for later use or discard them. 
-- ```\Ref``` - reflectance PMT channel, contains .txt files with stimulus information. 
+- `\Analysis` - temporary files containing the transformations and file conversions will be saved here. After the experiment and online analysis is over, you are free to keep them for later use or discard them. 
+- `\Ref` - reflectance PMT channel, contains .txt files with stimulus information. 
 - `\Vis` - visible PMT channel, anticipated folder containing newly acquired and registered videos to analyze
-- ```TargetImage.tif``` - an image from a previous session for registration with your new data. Use one of the images output from Qiang's software if possible as the properties will most resemble the registered images produced during the experiment. 
-- ```TargetRois.txt``` - the ROIs from the target image in a label matrix. 
+- `TargetImage.tif` - an image from a previous session for registration with your new data. Use one of the images output from Qiang's software if possible as the properties will most resemble the registered images produced during the experiment. 
+- `TargetRois.txt` - the ROIs from the target image in a label matrix. 
 
-In the main `faoslo-online` folder, create a file called `getUserPreferences.m` and paste in the following text:
+Before running the first time, you need to let MATLAB know where FIJI is located on your computer
 ```matlab
-fijiDir='';
+addpref('ao_tools', 'fiji_path', '...\Fiji.app\scripts')
 ```
-Fill in the full file path to your FIJI installation (the folder called Fiij.app that contains the actual ImageJ application and folders for macros, luts, etc.). This is needed to establish the connection between MATLAB and ImageJ. 
+Replace `'...\Fiji.app\scripts'` with the full file path to the scripts folder within the FIJI.app folder for your ImageJ/FIJI installation.This is needed to establish the connection between MATLAB and ImageJ. 
 
 
 ## Use
@@ -38,7 +38,7 @@ ij.IJ.run("Quit", "");
 **Important:** A quirk of the software that communicates with MATLAB-ImageJ plugin is that it cannot be easily used from inside a function, only scripts or the command line. For this reason, it was necessary to occasionally use the base workspace. As long as you have the OnlineAnalysisApp open, don't delete the `app` variable you created when instantiating it. 
 
 ## Requirements
-- MATLAB 2015a or higher with the Image Processing Toolbox
+- MATLAB 2015a or higher with the following toolboxes: Image Processing, Curve Fitting
 - FIJI with the [MATLAB-ImageJ](https://sites.imagej.net/MATLAB) plugin installed 
 
 ## Dependencies

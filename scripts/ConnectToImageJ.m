@@ -14,15 +14,19 @@
 % -------------------------------------------------------------------------
 
 try 
-    % Previous ImageJ connection
+    % Previous ImageJ connection in matlab session
     if isempty(ij.IJ.getInstance())
-        run('getUserPreferences.m');
+        fijiDir = getpref('ao_tools', 'fiji_path');
         addpath(fijiDir);
         ImageJ;
     end
 catch
     % No previous ImageJ connection
-    run('getUserPreferences.m');
+    try 
+        fijiDir = getpref('ao_tools', 'fiji_path'); 
+    catch
+        error('No fiji_path preference found! See README');
+    end
     addpath(fijiDir);
     ImageJ;
 end
